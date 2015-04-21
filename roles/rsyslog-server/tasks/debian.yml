@@ -1,0 +1,9 @@
+- name: Install Rsyslog
+  apt: pkg={{ item }} update_cache=yes state=installed
+  with_items:
+   - rsyslog
+
+- name: Copy Rsyslog Conf
+  template: src=rsyslog.j2 dest={{ rsyslog_conf }} owner=root group=root mode=0644
+  notify:
+   - restart rsyslog

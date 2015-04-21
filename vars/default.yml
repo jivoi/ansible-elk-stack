@@ -1,0 +1,16 @@
+rsyslog_conf: "/etc/rsyslog.conf"
+
+elasticsearch_repo: "1.4"
+elasticsearch_version: "1.4.2"
+elasticsearch_conf: "/etc/elasticsearch/elasticsearch.yml"
+
+logstash_version: "1.4"
+
+nginx_confd: "/etc/nginx/conf.d"
+
+usname: "kibana"
+htpass: "kibana"
+domain: "kibana"
+
+kibana_url: "https://download.elasticsearch.org/kibana/kibana/kibana-{{ kibana_version }}.tar.gz"
+kibana_version: "3.1.2"

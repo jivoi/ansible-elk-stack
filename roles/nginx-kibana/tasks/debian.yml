@@ -1,0 +1,48 @@
+- name: Install Nginx
+  apt: pkg={{ item }} update_cache=yes state=present
+  with_items:
+   - nginx
+   - python-passlib
+  notify:
+   - start nginx
+
+- name: Create an user to host Kibana
+  user: name={{ usname }}
+
+- name: Ensure correct permissions on home directory
+  file: path=/home/{{  usname }} mode=0755
+
+- name: Create Vhost public_html
+  file: path=/home/{{ usname }}/public_html owner={{ usname }} group={{ usname }} mode=0755 state=directory
+
+- name: Create Vhost log directory
+  file: path=/home/{{ usname }}/logs owner=root group=root mode=0755 state=directory
+
+- name: Get Kibana Archive
+  get_url: url={{ kibana_url }} dest=/home/{{ usname }}/public_html/kibana.tar.gz
+
+- name: Unarchive Kibana
+  command: tar zxf /home/{{ usname }}/public_html/kibana.tar.gz -C /home/{{ usname }}/public_html/ creates=/home/{{ usname }}/public_html/kibana-{{ kibana_version }}
+
+- name: Set permissions for Kibana
+  command: /bin/chown -R {{ usname }}.{{ usname }} /home/{{ usname }}/public_html/
+
+- name: Disable default Vhost on Debian OS family
+  file: path=/etc/nginx/sites-enabled/default state=absent
+  notify:
+   - restart nginx
+
+- name: Enable Vhost on Debian OS family
+  template: src=vhost-nginx.j2 dest=/etc/nginx/sites-available/{{ domain }}.conf owner=root group=root mode=0644
+  notify:
+   - restart nginx
+
+- name: Activate Vhost with symlink on Debian OS family
+  file: src=/etc/nginx/sites-available/{{ domain }}.conf dest=/etc/nginx/sites-enabled/{{ domain }}.conf owner=root group=root mode=0644 state=link
+  notify:
+   - restart nginx
+
+- name: Create htpasswd User
+  htpasswd: path={{ nginx_confd }}/{{ domain }}.htpasswd name={{ usname }} password={{ htpass }} owner=root group=root mode=0644
+  notify:
+   - restart nginx

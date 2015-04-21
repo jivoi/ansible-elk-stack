@@ -1,0 +1,128 @@
+# -*- coding: utf-8 -*-
+# Как отлаживаться
+# Отладчик регулярок - http://grokdebug.herokuapp.com/
+#
+# Создайте файл /etc/rsyslog.d/test-logstash.conf с содержимым:
+#
+# *.* @localhost:5544
+#
+# Потом из питона можно слать логи
+# import logging
+# import ylog
+# hnd = ylog.handlers.SysLogHandler('logstash', prefix='test')
+# log = logging.Logger('stash')
+# log.addHandler(hnd)
+# log.info('ololo')
+#
+# чтобы видеть результат в консоле откомметируйте `stdout {}` в конце конфига
+# чтобы вводить строчку лога в консоль откомментируйте `stdin {}` в начале
+
+input {
+  udp {
+    type => "syslog"
+    port => 5544
+  }
+  tcp {
+    type => "syslog"
+    port => 5544
+  }
+  # stdin {type=>"syslog"}
+}
+
+
+filter {
+if [type] == "syslog" {
+  grok {
+    match => {
+      message => "<%{POSINT:syslog_pri}>%{TIMESTAMP_ISO8601:syslog_timestamp} %{SYSLOGHOST:syslog_hostname} %{DATA:syslog_program}(?:\[%{POSINT:syslog_pid}\])?: %{GREEDYDATA:syslog_message}"
+    }
+    add_field => {
+      "received_at" => "%{@timestamp}"
+      "projectname" => "%{syslog_program}"
+      "prefix" => "%{syslog_program}"
+    }
+  }
+  syslog_pri { }
+  if !("_grokparsefailure" in [tags]) {
+    mutate {
+      replace => [ "host", "%{syslog_hostname}" ]
+      replace => [ "message", "%{syslog_message}" ]
+      replace => [ "timestamp", "%{syslog_timestamp}" ]
+    }
+  }
+  mutate {
+    remove_field => [ "syslog_hostname", "syslog_message", "syslog_timestamp",
+                      "syslog_facility_code", "syslog_pri", "syslog_severity",
+                      "syslog_severity_code", "syslog_facility"]
+    gsub => [
+             "prefix", "(?:example.com\/(.+?)\/(.+))", "\2",
+             "projectname", "(?:example.com\/(.+?)\/(.+))", "\1"
+            ]
+     add_tag => ["%{prefix}", "%{projectname}"]
+  }
+  if ![projectname] {
+    mutate {
+      add_field => ["projectname", "default"]
+    }
+  }
+  mutate {
+      add_field => ["index_name", "logstash-%{projectname}-%{+YYYY.MM}"]
+  }
+
+##################################
+# Ниже можно писать свои фильтры #
+##################################
+
+# nginx/access.log
+if [projectname] == "nginx" {
+  grok {
+    match => {
+      "message" => "\[%{HTTPDATE:timestamp}\] (?<hostname>%{IPORHOST}(?:\:%{POSINT})?) %{NOTSPACE:remote_addr} \"%{WORD:method} %{DATA:request} (?:HTTP/%{NUMBER:httpversion})?\" %{NUMBER:status:int} \"%{DATA:referer}\" \"%{DATA:raw_useragent}\" \"%{DATA:login}\" \"yandexuid=%{DATA:uid}\" %{DATA:cache_status} %{NUMBER:bytes_sent:int} (?:%{NUMBER:response_time:float}|-) %{NUMBER:request_time:float}"
+    }
+  }
+
+  useragent {
+    source => "raw_useragent"
+    target => "useragent"
+  }
+
+  mutate {
+    replace => ["index_name", "logstash-%{projectname}-%{+YYYY.ww}"]
+  }
+
+  if !("_grokparsefailure" in [tags]) {
+    mutate {
+      remove_field => ["message"]
+    }
+  }
+}
+
+#########################
+# Конец своих фильтров  #
+#########################
+
+# Парсилка даты события. Дата события должна быть помещена в поле timestamp
+  date {
+    match => [ "timestamp", "MMM  d HH:mm:ss", "MMM dd HH:mm:ss",
+               "yyyy-MM-dd HH:mm:ss,SSS", "yyyy-MM-dd HH:mm:ss",
+               "dd/MMM/YYYY:HH:mm:ss Z",
+               "ISO8601" ]
+  }
+
+  mutate {
+    remove_field => ["timestamp"]
+  }
+
+}}
+
+output {
+
+  elasticsearch {
+    protocol => "http"
+    host => "192.168.56.103"
+    port => 9200
+    workers => 1
+    index => "%{index_name}"
+  }
+  # stdout { codec => rubydebug }
+}
