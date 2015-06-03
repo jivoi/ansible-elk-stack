@@ -3,3 +3,6 @@
 
 - name: restart nginx
   service: name=nginx state=restarted enabled=yes
+
+- name: restart kibana
+  service: name=kibana state=restarted

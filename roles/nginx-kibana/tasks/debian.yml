@@ -46,3 +46,23 @@
   htpasswd: path={{ nginx_confd }}/{{ domain }}.htpasswd name={{ usname }} password={{ htpass }} owner=root group=root mode=0644
   notify:
    - restart nginx
+
+- name: Configure Kibana service definition
+  template: src=kibana.conf.j2 dest=/etc/init/kibana.conf
+  notify:
+    - restart kibana
+
+- name: Configure Kibana
+  template: src=kibana.yml.j2
+            dest=/home/{{ usname }}/public_html/kibana-{{ kibana_version }}-{{ kibana_os }}-{{ kibana_arch }}/config/kibana.yml
+  notify:
+    - restart kibana
+
+- name: Touch log file if it does not exist
+  command: touch {{ kibana_log }} creates={{ kibana_log }}
+
+- name: Set log file permissions
+  file: path={{ kibana_log }} owner={{ usname }} group={{ usname }} mode=0644
+
+- name: Configure Kibana log rotation
+  template: src=logrotate_kibana.j2 dest=/etc/logrotate.d/kibana
